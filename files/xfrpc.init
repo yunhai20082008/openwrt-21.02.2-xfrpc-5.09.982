@@ -20,45 +20,49 @@ handle_xfrpc() {
 		return
 	fi
 
-	echo "[$name]" >> "$config"
-
-	handle_type() {
-		uci_validate_section xfrpc xfrpc "$name" \
-				'type:or("tcp", "udp", "ftp", "http", "https")' \
-				'local_ip:ipaddr:127.0.0.1' \
-				'local_port:uinteger'
-
-		echo "type = $type" >> "$config"
-		echo "local_ip = $local_ip" >> "$config"
-		echo "local_port = $local_port" >> "$config"
-		case "$type" in
-		"tcp"|"udp")
-			config_get remote_port "$name" remote_port
-			echo "remote_port = $remote_port" >> "$config"
-			;;
-		"ftp")
-			config_get remote_port "$name" remote_port
-			config_get remote_data_port "$name" remote_data_port
-			echo "remote_port = $remote_port" >> "$config"
-			echo "remote_data_port = $remote_data_port" >> "$config"
-			;;
-		esac
-	}
-
 	if [ "$name" = "common" ]; then
 		uci_validate_section xfrpc xfrpc "$name" \
-				'server_addr:ipaddr' \
+				'server_addr:string' \
 				'server_port:uinteger' \
-				'token:string'
+				'token:string' \
+				'user:string' \
+				'meta_token:string'
 
 		[ -z "$token" ] && {
 			echo "no token"
 			exit
 		}
-		echo "server_addr = $server_addr" >> "$config"
-		echo "server_port = $server_port" >> "$config"
-		echo "token = $token" >> "$config"
+		echo "serverAddr = \"$server_addr\"" >> "$config"
+		echo "serverPort = $server_port" >> "$config"
+		echo "auth.method = \"token\"" >> "$config"
+		echo "auth.token = \"$token\"" >> "$config"
+		[ -n "$user" ] && echo "user = \"$user\"" >> "$config"
+		[ -n "$meta_token" ] && echo "metadatas.token = \"$meta_token\"" >> "$config"
 	else
+		handle_type() {
+			uci_validate_section xfrpc xfrpc "$name" \
+					'type:or("tcp", "udp", "ftp", "http", "https")' \
+					'local_ip:ipaddr:127.0.0.1' \
+					'local_port:uinteger'
+
+			echo "[[proxies]]" >> "$config"
+			echo "name = \"$name\"" >> "$config"
+			echo "type = \"$type\"" >> "$config"
+			echo "localIP = \"$local_ip\"" >> "$config"
+			echo "localPort = $local_port" >> "$config"
+			case "$type" in
+			"tcp"|"udp")
+				config_get remote_port "$name" remote_port
+				echo "remotePort = $remote_port" >> "$config"
+				;;
+			"ftp")
+				config_get remote_port "$name" remote_port
+				config_get remote_data_port "$name" remote_data_port
+				echo "remotePort = $remote_port" >> "$config"
+				;;
+			esac
+		}
+
 		handle_type
 	fi
 }
@@ -68,7 +72,7 @@ service_triggers() {
 }
 
 start_service() {
-	local conf_file="/var/etc/$NAME.ini"
+	local conf_file="/var/etc/$NAME.toml"
 
 	> "$conf_file"
 	config_load "$NAME"
